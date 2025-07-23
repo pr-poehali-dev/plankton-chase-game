@@ -10,18 +10,25 @@ interface GameItem {
   type: 'coin' | 'explosive';
   x: number;
   y: number;
+  z: number;
   collected: boolean;
+  rotationX: number;
+  rotationY: number;
+  scale: number;
 }
 
 interface GameState {
   score: number;
   spongebobY: number;
+  spongebobZ: number;
   planktonX: number;
+  planktonZ: number;
   items: GameItem[];
   gameSpeed: number;
   isJumping: boolean;
   explosives: number;
   isGameRunning: boolean;
+  cameraAngle: number;
 }
 
 const Index = () => {
@@ -30,12 +37,15 @@ const Index = () => {
   const [gameState, setGameState] = useState<GameState>({
     score: 0,
     spongebobY: 50,
+    spongebobZ: 0,
     planktonX: 80,
+    planktonZ: -100,
     items: [],
     gameSpeed: 2,
     isJumping: false,
     explosives: 0,
-    isGameRunning: false
+    isGameRunning: false,
+    cameraAngle: 0
   });
   
   const gameLoopRef = useRef<NodeJS.Timeout | null>(null);
@@ -66,7 +76,11 @@ const Index = () => {
           type: Math.random() > 0.5 ? 'coin' : 'explosive',
           x: window.innerWidth + i * 200,
           y: Math.random() > 0.5 ? 30 : 70,
-          collected: false
+          z: Math.random() * -200 - 50,
+          collected: false,
+          rotationX: Math.random() * 360,
+          rotationY: Math.random() * 360,
+          scale: 0.8 + Math.random() * 0.4
         });
       }
     }
@@ -84,7 +98,13 @@ const Index = () => {
         if (!prev.isGameRunning) return prev;
 
         const newItems = prev.items
-          .map(item => ({ ...item, x: item.x - prev.gameSpeed }))
+          .map(item => ({ 
+            ...item, 
+            x: item.x - prev.gameSpeed,
+            rotationX: item.rotationX + 2,
+            rotationY: item.rotationY + 1,
+            z: item.z + Math.sin(Date.now() / 1000 + item.id) * 0.5
+          }))
           .filter(item => item.x > -50);
 
         // Add new items
@@ -94,7 +114,11 @@ const Index = () => {
             type: Math.random() > 0.6 ? 'coin' : 'explosive',
             x: window.innerWidth + 50,
             y: Math.random() > 0.5 ? 30 : 70,
-            collected: false
+            z: Math.random() * -200 - 50,
+            collected: false,
+            rotationX: Math.random() * 360,
+            rotationY: Math.random() * 360,
+            scale: 0.8 + Math.random() * 0.4
           });
         }
 
@@ -105,6 +129,8 @@ const Index = () => {
           ...prev,
           items: newItems,
           planktonX: Math.max(75, Math.min(85, newPlanktonX)),
+          planktonZ: prev.planktonZ + Math.sin(Date.now() / 800) * 0.8,
+          cameraAngle: prev.cameraAngle + 0.1,
           score: prev.score + 1
         };
       });
@@ -286,6 +312,10 @@ const Index = () => {
     <div 
       className="min-h-screen bg-gradient-to-b from-cyan-300 via-blue-400 to-blue-700 relative overflow-hidden cursor-pointer select-none"
       onClick={jump}
+      style={{
+        perspective: '1000px',
+        perspectiveOrigin: '50% 50%'
+      }}
     >
       {/* Game UI */}
       <div className="absolute top-4 left-4 z-20 flex items-center space-x-6">
@@ -321,10 +351,17 @@ const Index = () => {
         <p className="text-white text-sm font-bold">X = ВЗОРВАТЬ</p>
       </div>
 
-      {/* Ocean floor */}
-      <div className="absolute bottom-0 w-full h-32 bg-gradient-to-t from-yellow-600 to-yellow-400 border-t-4 border-orange-500" />
+      {/* 3D Ocean floor */}
+      <div 
+        className="absolute bottom-0 w-full h-32 bg-gradient-to-t from-yellow-600 to-yellow-400 border-t-4 border-orange-500"
+        style={{
+          transform: `rotateX(45deg) translateZ(0px)`,
+          transformOrigin: 'bottom',
+          boxShadow: '0 -20px 40px rgba(0,0,0,0.3)'
+        }}
+      />
 
-      {/* SpongeBob */}
+      {/* 3D SpongeBob */}
       <div 
         className={`absolute w-20 h-20 transition-all duration-300 z-10 ${
           gameState.isJumping ? 'transform scale-110' : ''
@@ -332,28 +369,50 @@ const Index = () => {
         style={{
           left: '10%',
           bottom: `${gameState.spongebobY}px`,
-          transform: gameState.isJumping ? 'rotate(-15deg)' : 'rotate(0deg)'
+          transform: `
+            ${gameState.isJumping ? 'rotateY(-15deg) rotateX(-10deg) scale(1.1)' : 'rotateY(5deg) rotateX(0deg)'} 
+            translateZ(${gameState.spongebobZ}px)
+            rotateZ(${Math.sin(Date.now() / 200) * 5}deg)
+          `,
+          transformStyle: 'preserve-3d',
+          filter: 'drop-shadow(5px 5px 10px rgba(0,0,0,0.4))'
         }}
       >
         <img 
           src="/img/9bb7b3d1-d4dc-4773-a864-cc78b043b220.jpg" 
           alt="SpongeBob" 
-          className="w-full h-full rounded-full border-2 border-yellow-400 animate-bounce"
+          className="w-full h-full rounded-full border-2 border-yellow-400"
+          style={{
+            transform: 'rotateY(0deg)',
+            backfaceVisibility: 'hidden'
+          }}
         />
       </div>
 
-      {/* Plankton */}
+      {/* 3D Plankton */}
       <div 
         className="absolute w-16 h-16 z-10"
         style={{
           right: `${100 - gameState.planktonX}%`,
-          bottom: '60px'
+          bottom: '60px',
+          transform: `
+            translateZ(${gameState.planktonZ}px) 
+            rotateY(${gameState.cameraAngle * 2}deg) 
+            rotateX(${Math.sin(Date.now() / 600) * 10}deg)
+            scale(${1 + Math.sin(Date.now() / 800) * 0.1})
+          `,
+          transformStyle: 'preserve-3d',
+          filter: 'drop-shadow(3px 3px 8px rgba(0,100,0,0.5))'
         }}
       >
         <img 
           src="/img/781012b5-d5a9-4179-9201-03214588a25a.jpg" 
           alt="Plankton" 
-          className="w-full h-full rounded-full border-2 border-green-400 animate-pulse"
+          className="w-full h-full rounded-full border-2 border-green-400"
+          style={{
+            transform: 'rotateY(0deg)',
+            backfaceVisibility: 'hidden'
+          }}
         />
       </div>
 
@@ -383,39 +442,76 @@ const Index = () => {
             className="absolute w-10 h-10 z-10"
             style={{
               left: `${item.x}px`,
-              bottom: `${item.y}px`
+              bottom: `${item.y}px`,
+              transform: `
+                translateZ(${item.z}px) 
+                rotateX(${item.rotationX}deg) 
+                rotateY(${item.rotationY}deg)
+                scale(${item.scale})
+              `,
+              transformStyle: 'preserve-3d',
+              filter: 'drop-shadow(2px 2px 6px rgba(0,0,0,0.3))'
             }}
           >
             {item.type === 'coin' ? (
-              <div className="w-10 h-10 bg-yellow-400 rounded-full border-2 border-yellow-600 flex items-center justify-center animate-spin">
+              <div 
+                className="w-10 h-10 bg-yellow-400 rounded-full border-2 border-yellow-600 flex items-center justify-center"
+                style={{
+                  background: `linear-gradient(45deg, #ffd700, #ffed4e, #ffd700)`,
+                  boxShadow: '0 0 15px rgba(255, 215, 0, 0.6)',
+                  backfaceVisibility: 'hidden'
+                }}
+              >
                 <Icon name="Coins" size={24} className="text-yellow-600" />
               </div>
             ) : (
               <img 
                 src="/img/1a2d0889-2d42-4f6f-baf1-b212c2b8cfff.jpg" 
                 alt="TNT" 
-                className="w-full h-full rounded animate-pulse"
+                className="w-full h-full rounded"
+                style={{
+                  filter: 'brightness(1.1) contrast(1.2)',
+                  boxShadow: '0 0 10px rgba(255, 0, 0, 0.4)',
+                  backfaceVisibility: 'hidden'
+                }}
               />
             )}
           </div>
         );
       })}
 
-      {/* Bubbles */}
+      {/* 3D Bubbles */}
       <div className="absolute inset-0 pointer-events-none">
-        {[...Array(15)].map((_, i) => (
+        {[...Array(25)].map((_, i) => (
           <div
             key={i}
-            className="absolute w-3 h-3 bg-white bg-opacity-40 rounded-full animate-bounce"
+            className="absolute bg-white bg-opacity-40 rounded-full"
             style={{
               left: `${Math.random() * 100}%`,
               bottom: `${Math.random() * 100}%`,
-              animationDelay: `${Math.random() * 2}s`,
-              animationDuration: `${1 + Math.random() * 2}s`
+              width: `${8 + Math.random() * 12}px`,
+              height: `${8 + Math.random() * 12}px`,
+              transform: `
+                translateZ(${Math.random() * -300}px) 
+                rotateX(${Math.random() * 360}deg) 
+                rotateY(${Math.random() * 360}deg)
+              `,
+              transformStyle: 'preserve-3d',
+              animation: `float ${1 + Math.random() * 3}s ease-in-out infinite ${Math.random() * 2}s`,
+              boxShadow: '0 0 10px rgba(255, 255, 255, 0.5)',
+              background: `radial-gradient(circle at 30% 30%, rgba(255,255,255,0.8), rgba(255,255,255,0.2))`
             }}
           />
         ))}
       </div>
+      
+      {/* CSS Animation for floating bubbles */}
+      <style jsx>{`
+        @keyframes float {
+          0%, 100% { transform: translateY(0px) scale(1); }
+          50% { transform: translateY(-20px) scale(1.1); }
+        }
+      `}</style>
     </div>
   );
 
