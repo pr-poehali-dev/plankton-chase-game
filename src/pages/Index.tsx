@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -8,6 +8,17 @@ import Icon from '@/components/ui/icon';
 const Index = () => {
   const [coins, setCoins] = useState(1250);
   const [currentView, setCurrentView] = useState('menu');
+  const [gameState, setGameState] = useState({
+    score: 0,
+    spongebobY: 50,
+    planktonX: 80,
+    items: [],
+    gameSpeed: 2,
+    isJumping: false,
+    explosives: 0
+  });
+  const gameLoopRef = useRef(null);
+  const [gameRunning, setGameRunning] = useState(false);
   
   const shopItems = [
     { id: 1, name: 'Ускорение', description: 'Увеличивает скорость бега на 25%', price: 500, icon: 'Zap', owned: false },
@@ -80,6 +91,7 @@ const Index = () => {
         <div className="grid grid-cols-2 gap-4 max-w-md mx-auto">
           <Button 
             size="lg" 
+            onClick={() => setCurrentView('game')}
             className="bg-yellow-400 hover:bg-yellow-500 text-black font-bold text-xl py-4 px-8 rounded-xl border-4 border-orange-400 shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105"
             style={{ fontFamily: 'Comic Sans MS, cursive' }}
           >
@@ -324,7 +336,264 @@ const Index = () => {
     </div>
   );
 
+  const renderGame = () => {
+    useEffect(() => {
+      if (currentView === 'game' && !gameRunning) {
+        setGameRunning(true);
+        startGame();
+      }
+      return () => {
+        if (gameLoopRef.current) {
+          clearInterval(gameLoopRef.current);
+        }
+      };
+    }, [currentView, gameRunning]);
+
+    const startGame = () => {
+      // Initialize game items
+      const initialItems = [];
+      for (let i = 0; i < 10; i++) {
+        if (Math.random() > 0.7) {
+          initialItems.push({
+            id: Math.random(),
+            type: Math.random() > 0.5 ? 'coin' : 'explosive',
+            x: 100 + i * 150,
+            y: Math.random() > 0.5 ? 30 : 70,
+            collected: false
+          });
+        }
+      }
+      
+      setGameState(prev => ({
+        ...prev,
+        items: initialItems,
+        score: 0,
+        explosives: 0
+      }));
+
+      // Game loop
+      gameLoopRef.current = setInterval(() => {
+        setGameState(prev => {
+          const newItems = prev.items.map(item => ({
+            ...item,
+            x: item.x - prev.gameSpeed
+          })).filter(item => item.x > -50);
+
+          // Add new items
+          if (Math.random() > 0.95) {
+            newItems.push({
+              id: Math.random(),
+              type: Math.random() > 0.6 ? 'coin' : 'explosive',
+              x: window.innerWidth + 50,
+              y: Math.random() > 0.5 ? 30 : 70,
+              collected: false
+            });
+          }
+
+          // Move Plankton
+          const newPlanktonX = prev.planktonX + Math.sin(Date.now() / 1000) * 0.5;
+
+          return {
+            ...prev,
+            items: newItems,
+            planktonX: Math.max(75, Math.min(85, newPlanktonX)),
+            score: prev.score + 1
+          };
+        });
+      }, 50);
+    };
+
+    const jump = () => {
+      if (!gameState.isJumping) {
+        setGameState(prev => ({ ...prev, isJumping: true, spongebobY: 30 }));
+        setTimeout(() => {
+          setGameState(prev => ({ ...prev, isJumping: false, spongebobY: 50 }));
+        }, 600);
+      }
+    };
+
+    const collectItem = (itemId, itemType) => {
+      setGameState(prev => ({
+        ...prev,
+        items: prev.items.map(item => 
+          item.id === itemId ? { ...item, collected: true } : item
+        ),
+        ...(itemType === 'coin' ? { score: prev.score + 10 } : { explosives: prev.explosives + 1 }),
+        ...(itemType === 'coin' && { coins: coins + 1 })
+      }));
+      if (itemType === 'coin') {
+        setCoins(prev => prev + 1);
+      }
+    };
+
+    const explodePlankton = () => {
+      if (gameState.explosives > 0) {
+        setGameState(prev => ({
+          ...prev,
+          explosives: prev.explosives - 1,
+          score: prev.score + 100
+        }));
+        // Add explosion effect
+        setTimeout(() => {
+          alert('БУМ! Планктон взорван! +100 очков!');
+        }, 100);
+      }
+    };
+
+    return (
+      <div 
+        className="min-h-screen bg-gradient-to-b from-cyan-300 via-blue-400 to-blue-700 relative overflow-hidden cursor-pointer"
+        onClick={jump}
+        onKeyDown={(e) => {
+          if (e.code === 'Space') {
+            e.preventDefault();
+            jump();
+          }
+          if (e.code === 'KeyX' || e.code === 'Enter') {
+            explodePlankton();
+          }
+        }}
+        tabIndex={0}
+      >
+        {/* Game UI */}
+        <div className="absolute top-4 left-4 z-20 flex items-center space-x-6">
+          <Button 
+            onClick={() => {
+              setCurrentView('menu');
+              setGameRunning(false);
+              if (gameLoopRef.current) clearInterval(gameLoopRef.current);
+            }}
+            className="bg-red-500 hover:bg-red-600 text-white font-bold"
+          >
+            <Icon name="X" size={20} className="mr-1" />
+            Выход
+          </Button>
+          
+          <div className="flex items-center space-x-4 bg-black bg-opacity-50 px-4 py-2 rounded-lg">
+            <div className="flex items-center space-x-1">
+              <Icon name="Star" size={20} className="text-yellow-400" />
+              <span className="text-white font-bold">{gameState.score}</span>
+            </div>
+            
+            <div className="flex items-center space-x-1">
+              <Icon name="Coins" size={20} className="text-yellow-400" />
+              <span className="text-white font-bold">{coins}</span>
+            </div>
+            
+            <div className="flex items-center space-x-1">
+              <img src="/img/1a2d0889-2d42-4f6f-baf1-b212c2b8cfff.jpg" alt="TNT" className="w-5 h-5" />
+              <span className="text-white font-bold">{gameState.explosives}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Instructions */}
+        <div className="absolute top-4 right-4 z-20 bg-black bg-opacity-50 px-4 py-2 rounded-lg">
+          <p className="text-white text-sm font-bold">КЛИК = ПРЫЖОК</p>
+          <p className="text-white text-sm font-bold">X = ВЗОРВАТЬ</p>
+        </div>
+
+        {/* Ocean floor */}
+        <div className="absolute bottom-0 w-full h-32 bg-gradient-to-t from-yellow-600 to-yellow-400 border-t-4 border-orange-500" />
+
+        {/* SpongeBob */}
+        <div 
+          className={`absolute w-20 h-20 transition-all duration-300 z-10 ${
+            gameState.isJumping ? 'transform scale-110' : ''
+          }`}
+          style={{
+            left: '10%',
+            bottom: `${gameState.spongebobY}px`,
+            transform: gameState.isJumping ? 'rotate(-15deg)' : 'rotate(0deg)'
+          }}
+        >
+          <img 
+            src="/img/9bb7b3d1-d4dc-4773-a864-cc78b043b220.jpg" 
+            alt="SpongeBob" 
+            className="w-full h-full rounded-full border-2 border-yellow-400 animate-bounce"
+          />
+        </div>
+
+        {/* Plankton */}
+        <div 
+          className="absolute w-16 h-16 z-10"
+          style={{
+            right: `${100 - gameState.planktonX}%`,
+            bottom: '60px'
+          }}
+        >
+          <img 
+            src="/img/781012b5-d5a9-4179-9201-03214588a25a.jpg" 
+            alt="Plankton" 
+            className="w-full h-full rounded-full border-2 border-green-400 animate-pulse"
+          />
+        </div>
+
+        {/* Game Items */}
+        {gameState.items.map((item) => {
+          if (item.collected) return null;
+          
+          // Check collision with SpongeBob
+          const spongebobLeft = window.innerWidth * 0.1;
+          const spongebobRight = spongebobLeft + 80;
+          const spongebobTop = window.innerHeight - gameState.spongebobY - 80;
+          const spongebobBottom = window.innerHeight - gameState.spongebobY;
+          
+          const itemLeft = item.x;
+          const itemRight = item.x + 40;
+          const itemTop = window.innerHeight - item.y - 40;
+          const itemBottom = window.innerHeight - item.y;
+          
+          if (spongebobLeft < itemRight && spongebobRight > itemLeft &&
+              spongebobTop < itemBottom && spongebobBottom > itemTop) {
+            setTimeout(() => collectItem(item.id, item.type), 0);
+          }
+          
+          return (
+            <div
+              key={item.id}
+              className={`absolute w-10 h-10 z-10 animate-spin ${
+                item.type === 'coin' ? 'bg-yellow-400 rounded-full border-2 border-yellow-600' : ''
+              }`}
+              style={{
+                left: `${item.x}px`,
+                bottom: `${item.y}px`
+              }}
+            >
+              {item.type === 'coin' ? (
+                <Icon name="Coins" size={40} className="text-yellow-600" />
+              ) : (
+                <img 
+                  src="/img/1a2d0889-2d42-4f6f-baf1-b212c2b8cfff.jpg" 
+                  alt="TNT" 
+                  className="w-full h-full rounded animate-pulse"
+                />
+              )}
+            </div>
+          );
+        })}
+
+        {/* Bubbles */}
+        <div className="absolute inset-0 pointer-events-none">
+          {[...Array(15)].map((_, i) => (
+            <div
+              key={i}
+              className="absolute w-3 h-3 bg-white bg-opacity-40 rounded-full animate-bounce"
+              style={{
+                left: `${Math.random() * 100}%`,
+                bottom: `${Math.random() * 100}%`,
+                animationDelay: `${Math.random() * 2}s`,
+                animationDuration: `${1 + Math.random() * 2}s`
+              }}
+            />
+          ))}
+        </div>
+      </div>
+    );
+  };
+
   // Main render logic
+  if (currentView === 'game') return renderGame();
   if (currentView === 'shop') return renderShop();
   if (currentView === 'leaderboard') return renderLeaderboard();
   if (currentView === 'settings') return renderSettings();
